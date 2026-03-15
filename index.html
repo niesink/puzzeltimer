@@ -674,7 +674,32 @@
         // ══════════════════════════════════════════
         //  TIMER LOGIC
         // ══════════════════════════════════════════
-        let startTime = null, elapsed = 0, rafId = null, isRunning = false;
+        function parseStartValue(value) {
+            if (!value) return 0;
+            const trimmed = value.trim();
+            if (/^\d+$/.test(trimmed)) {
+                return parseInt(trimmed, 10) * 1000;
+            }
+            if (/^\d{1,2}:\d{1,2}(:\d{1,2})?$/.test(trimmed)) {
+                const parts = trimmed.split(':').map(Number);
+                let hours = 0, minutes = 0, seconds = 0;
+                if (parts.length === 3) {
+                    [hours, minutes, seconds] = parts;
+                } else {
+                    [minutes, seconds] = parts;
+                }
+                if (hours > 23 || minutes > 59 || seconds > 59) return 0;
+                return ((hours * 3600) + (minutes * 60) + seconds) * 1000;
+            }
+            return 0;
+        }
+
+        function getInitialElapsedFromQuery() {
+            const params = new URLSearchParams(window.location.search);
+            return parseStartValue(params.get('start'));
+        }
+
+        let startTime = null, elapsed = getInitialElapsedFromQuery(), rafId = null, isRunning = false;
 
         const hhEl = document.getElementById('hh');
         const mmEl = document.getElementById('mm');
@@ -690,14 +715,21 @@
         function pad(n) { return String(n).padStart(2, '0'); }
         let prevSec = -1;
 
+        function renderTime(totalMs) {
+            const secs = Math.floor(totalMs / 1000);
+            prevSec = secs;
+            hhEl.textContent = pad(Math.floor(secs / 3600));
+            mmEl.textContent = pad(Math.floor((secs % 3600) / 60));
+            ssEl.textContent = pad(secs % 60);
+        }
+
+        renderTime(elapsed);
+
         function tick() {
             const total = elapsed + (performance.now() - startTime);
             const secs = Math.floor(total / 1000);
             if (secs !== prevSec) {
-                prevSec = secs;
-                hhEl.textContent = pad(Math.floor(secs / 3600));
-                mmEl.textContent = pad(Math.floor((secs % 3600) / 60));
-                ssEl.textContent = pad(secs % 60);
+                renderTime(total);
                 displayEl.classList.remove('pulse');
                 void displayEl.offsetWidth;
                 displayEl.classList.add('pulse');
@@ -737,8 +769,10 @@
 
         function resetTimer() {
             if (isRunning) { cancelAnimationFrame(rafId); isRunning = false; }
-            elapsed = 0; startTime = null; prevSec = -1;
-            hhEl.textContent = mmEl.textContent = ssEl.textContent = '00';
+            elapsed = getInitialElapsedFromQuery();
+            startTime = null;
+            prevSec = -1;
+            renderTime(elapsed);
             cardEl.classList.remove('running');
             pillEl.className = 'status-pill idle';
             statusTxt.textContent = 'Klaar om te starten';
